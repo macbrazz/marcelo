@@ -112,21 +112,27 @@ const ReportModal: React.FC<{
                       );
 
                       if (exp.receipt) {
-                          try {
-                              // A4: 210x297mm; margens simples
-                              receiptsDoc.addImage(exp.receipt, 'JPEG', 15, 40, 180, 230);
-                          } catch (e) {
-                              console.error("Error adding image to PDF: ", e);
-                              receiptsDoc.text("Erro ao carregar a imagem do comprovante.", 15, 50);
-                          }
+                        try {
+                          const src = String(exp.receipt);
+
+                          // Detecta o formato a partir do DataURL; padrão = JPEG
+                          const format =
+                            src.startsWith('data:image/png') ? 'PNG' :
+                            (src.startsWith('data:image/jpeg') || src.startsWith('data:image/jpg')) ? 'JPEG' :
+                            'JPEG';
+
+                          // A4 com margem simples
+                          const x = 15, y = 40, w = 180, h = 230;
+
+                          receiptsDoc.addImage(src, format as any, x, y, w, h, undefined, 'FAST');
+                        } catch (e) {
+                          console.error('Error adding image to PDF: ', e, { receiptType: typeof exp.receipt });
+                          receiptsDoc.setFontSize(11);
+                          receiptsDoc.text('Erro ao carregar a imagem do comprovante.', 15, 50);
+                        }
                       } else {
-                          receiptsDoc.setFontSize(16);
-                          receiptsDoc.text(
-                              "Sem comprovante fiscal para esta despesa.",
-                              105,
-                              150,
-                              { align: 'center' }
-                          );
+                        receiptsDoc.setFontSize(16);
+                        receiptsDoc.text('Sem comprovante fiscal para esta despesa.', 105, 150, { align: 'center' });
                       }
                   });
 
