@@ -1,15 +1,29 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trip } from '../types';
 
 interface TripSetupProps {
+  isOpen: boolean;
   onTripStart: (trip: Trip) => void;
+  onClose: () => void;
 }
 
-const TripSetup: React.FC<TripSetupProps> = ({ onTripStart }) => {
+const TripSetup: React.FC<TripSetupProps> = ({ isOpen, onTripStart, onClose }) => {
   const [destination, setDestination] = useState('');
   const [participants, setParticipants] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  useEffect(() => {
+    // Reseta o formulário quando o modal abre
+    if (isOpen) {
+      setDestination('');
+      setParticipants('');
+      setDate(new Date().toISOString().split('T')[0]);
+    }
+  }, [isOpen]);
+
+  if (!isOpen) {
+    return null;
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,10 +33,13 @@ const TripSetup: React.FC<TripSetupProps> = ({ onTripStart }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8">
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 animate-fade-in-up relative" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute top-3 right-4 text-3xl text-slate-400 hover:text-slate-600" aria-label="Fechar">
+          &times;
+        </button>
         <h1 className="text-3xl font-bold text-slate-800 text-center mb-2">Nova Viagem</h1>
-        <p className="text-slate-500 text-center mb-8">Preencha os dados para iniciar o controle de despesas.</p>
+        <p className="text-slate-500 text-center mb-8">Preencha os dados para iniciar o controle.</p>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="destination" className="block text-sm font-medium text-slate-700">

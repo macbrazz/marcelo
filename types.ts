@@ -1,4 +1,3 @@
-
 export enum ExpenseCategory {
   ALIMENTACAO = 'Alimentação',
   HOSPEDAGEM = 'Hospedagem',
@@ -18,4 +17,11 @@ export interface Expense {
   category: ExpenseCategory;
   amount: number;
   receipt: string; // Base64 encoded image
+}
+
+export interface TripRecord {
+  id: number;
+  trip: Trip;
+  expenses: Expense[];
+  total: number;
 }

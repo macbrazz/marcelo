@@ -1,10 +1,16 @@
-import React, { useState, useCallback } from 'react';
-import { Trip, Expense } from './types';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Trip, Expense, TripRecord } from './types';
 import TripSetup from './components/TripSetup';
 import ExpenseTracker from './components/ExpenseTracker';
+import TripHistory from './components/TripHistory';
 
 // To satisfy TypeScript since jsPDF is loaded from a script tag
 declare const window: any;
+
+// Helper function to detect mobile devices
+const isMobile = () => {
+  return /Mobi|Android|iPhone/i.test(navigator.userAgent) || ('ontouchstart' in window);
+};
 
 const ReportModal: React.FC<{
     trip: Trip;
@@ -54,13 +60,18 @@ const ReportModal: React.FC<{
                      summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
                 }
 
-                const pdfDataUri = summaryDoc.output('datauristring');
-                window.open(pdfDataUri, '_blank');
+                if (isMobile()) {
+                    const pdfDataUri = summaryDoc.output('datauristring');
+                    window.open(pdfDataUri, '_blank');
+                } else {
+                    summaryDoc.save(`resumo_viagem_${trip.destination}.pdf`);
+                }
 
             } else if (type === 'receipts') {
                 const expensesWithReceipts = expenses.filter(e => e.receipt);
                 if (expensesWithReceipts.length === 0) {
                     alert('Não há comprovantes para exibir.');
+                    setIsGenerating(false);
                     return;
                 }
                 
@@ -81,8 +92,12 @@ const ReportModal: React.FC<{
                     }
                 });
                 
-                const pdfDataUri = receiptsDoc.output('datauristring');
-                window.open(pdfDataUri, '_blank');
+                if (isMobile()) {
+                    const pdfDataUri = receiptsDoc.output('datauristring');
+                    window.open(pdfDataUri, '_blank');
+                } else {
+                    receiptsDoc.save(`comprovantes_viagem_${trip.destination}.pdf`);
+                }
             }
         } catch (error) {
             console.error("Failed to generate PDF:", error);
@@ -95,21 +110,21 @@ const ReportModal: React.FC<{
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center animate-fade-in-up">
-                <h2 className="text-2xl font-bold text-slate-800 mb-4">Opções do Relatório</h2>
-                <p className="text-slate-600 mb-6">Selecione uma opção para visualizar. O relatório será aberto em uma nova aba.</p>
+                <h2 className="text-2xl font-bold text-slate-800 mb-4">Relatórios</h2>
+                <p className="text-slate-600 mb-6">Gere os relatórios ou encerre a viagem para salvá-la no histórico.</p>
                 <div className="space-y-3">
                     <button onClick={() => generatePdf('summary')} className="w-full text-center py-3 px-4 rounded-md shadow-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition">
-                        Visualizar Resumo da Viagem
+                        Gerar Resumo da Viagem
                     </button>
                     <button onClick={() => generatePdf('receipts')} className="w-full text-center py-3 px-4 rounded-md shadow-sm font-medium text-white bg-teal-600 hover:bg-teal-700 transition">
-                        Visualizar Comprovantes
+                        Gerar Comprovantes
                     </button>
                     <button onClick={onEndTrip} className="w-full text-center py-3 px-4 rounded-md shadow-sm font-medium text-white bg-red-600 hover:bg-red-700 transition mt-4">
-                        Encerrar Viagem e Limpar Dados
+                        Encerrar e Salvar Viagem
                     </button>
                 </div>
                 <button onClick={onClose} className="mt-6 text-sm text-slate-500 hover:text-slate-700">
-                    Cancelar
+                    Voltar
                 </button>
             </div>
         </div>
@@ -118,30 +133,57 @@ const ReportModal: React.FC<{
 
 
 const App: React.FC = () => {
-  const [trip, setTrip] = useState<Trip | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [allTrips, setAllTrips] = useState<TripRecord[]>([]);
+  const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
+  const [activeExpenses, setActiveExpenses] = useState<Expense[]>([]);
+  
+  const [showSetupModal, setShowSetupModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
 
+  useEffect(() => {
+    try {
+      const savedTrips = localStorage.getItem('tripHistory');
+      if (savedTrips) {
+        setAllTrips(JSON.parse(savedTrips));
+      }
+    } catch (error) {
+      console.error("Could not load trips from localStorage", error);
+    }
+  }, []);
+
   const handleStartTrip = useCallback((tripDetails: Trip) => {
-    setTrip(tripDetails);
-    setExpenses([]);
+    setActiveTrip(tripDetails);
+    setActiveExpenses([]);
+    setShowSetupModal(false);
   }, []);
 
   const handleAddExpense = useCallback((newExpenseData: Omit<Expense, 'id'>) => {
-    setExpenses(prevExpenses => [
+    setActiveExpenses(prevExpenses => [
       ...prevExpenses,
       { ...newExpenseData, id: Date.now() }
     ]);
   }, []);
   
-  const handleEndTrip = useCallback(() => {
-    if (window.confirm('Tem certeza que deseja encerrar a viagem? Todos os dados serão apagados.')) {
-        setTrip(null);
-        setExpenses([]);
-        setShowReportModal(false);
-    }
-  }, []);
+  const handleEndAndSaveTrip = useCallback(() => {
+    if (!activeTrip) return;
+
+    const total = activeExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+    const newTripRecord: TripRecord = {
+      id: Date.now(),
+      trip: activeTrip,
+      expenses: activeExpenses,
+      total,
+    };
+
+    const updatedTrips = [...allTrips, newTripRecord];
+    setAllTrips(updatedTrips);
+    localStorage.setItem('tripHistory', JSON.stringify(updatedTrips));
+    
+    setActiveTrip(null);
+    setActiveExpenses([]);
+    setShowReportModal(false);
+  }, [activeTrip, activeExpenses, allTrips]);
   
   if(isGenerating) {
     return (
@@ -155,27 +197,39 @@ const App: React.FC = () => {
     );
   }
 
-  if (!trip) {
-    return <TripSetup onTripStart={handleStartTrip} />;
+  if (activeTrip) {
+    return (
+      <>
+        <ExpenseTracker
+          trip={activeTrip}
+          expenses={activeExpenses}
+          onAddExpense={handleAddExpense}
+          onShowReportModal={() => setShowReportModal(true)}
+        />
+        {showReportModal && (
+          <ReportModal 
+              trip={activeTrip}
+              expenses={activeExpenses}
+              onClose={() => setShowReportModal(false)}
+              onEndTrip={handleEndAndSaveTrip}
+              setIsGenerating={setIsGenerating}
+          />
+        )}
+      </>
+    );
   }
 
   return (
     <>
-      <ExpenseTracker
-        trip={trip}
-        expenses={expenses}
-        onAddExpense={handleAddExpense}
-        onShowReportModal={() => setShowReportModal(true)}
+      <TripHistory 
+        trips={allTrips}
+        onStartNewTrip={() => setShowSetupModal(true)}
       />
-      {showReportModal && trip && (
-        <ReportModal 
-            trip={trip}
-            expenses={expenses}
-            onClose={() => setShowReportModal(false)}
-            onEndTrip={handleEndTrip}
-            setIsGenerating={setIsGenerating}
-        />
-      )}
+      <TripSetup 
+        isOpen={showSetupModal}
+        onTripStart={handleStartTrip}
+        onClose={() => setShowSetupModal(false)}
+      />
     </>
   );
 };
