@@ -87,7 +87,7 @@ const ReportModal: React.FC<{
                     receiptsDoc.setFontSize(12);
                     receiptsDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 30);
                     
-                    if (exp.receipt) {
+                    /*if (exp.receipt) {
                         try {
                             // A4 page is 210x297mm. Give some margin.
                             receiptsDoc.addImage(exp.receipt, 'JPEG', 15, 40, 180, 230);
@@ -98,7 +98,7 @@ const ReportModal: React.FC<{
                     } else {
                         receiptsDoc.setFontSize(16);
                         receiptsDoc.text("Sem comprovante fiscal para esta despesa.", 105, 150, { align: 'center' });
-                    }
+                    }*/
                 });
 
                 if (isMobile()) {
