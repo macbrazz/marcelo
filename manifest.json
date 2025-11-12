@@ -1,0 +1,21 @@
+{
+  "short_name": "Despesas",
+  "name": "Controle de Despesas de Viagem",
+  "description": "Um aplicativo para uso em smartphone que controla despesas de viagem.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#f8fafc"
+}
