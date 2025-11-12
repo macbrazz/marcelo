@@ -7,7 +7,7 @@ interface ExpenseTrackerProps {
   trip: Trip;
   expenses: Expense[];
   onAddExpense: (expense: Omit<Expense, 'id'>) => void;
-  onGenerateReport: () => void;
+  onShowReportModal: () => void;
 }
 
 const AddExpenseForm: React.FC<{ onAdd: (expense: Omit<Expense, 'id'>) => void; onCancel: () => void; }> = ({ onAdd, onCancel }) => {
@@ -72,7 +72,7 @@ const AddExpenseForm: React.FC<{ onAdd: (expense: Omit<Expense, 'id'>) => void; 
     );
 };
 
-const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ trip, expenses, onAddExpense, onGenerateReport }) => {
+const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ trip, expenses, onAddExpense, onShowReportModal }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
 
@@ -134,8 +134,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ trip, expenses, onAddEx
       </div>
 
        <div className="fixed bottom-4 left-4 z-20">
-         <button onClick={onGenerateReport} className="bg-green-600 text-white rounded-full py-2 px-4 text-sm shadow-lg hover:bg-green-700 focus:outline-none">
-            Gerar Relatório e Encerrar
+         <button onClick={onShowReportModal} className="bg-green-600 text-white rounded-full py-2 px-4 text-sm shadow-lg hover:bg-green-700 focus:outline-none">
+            Relatórios e Encerrar
          </button>
        </div>
       
