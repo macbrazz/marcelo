@@ -16,7 +16,7 @@ export interface Expense {
   id: number;
   category: ExpenseCategory;
   amount: number;
-  receipt: string; // Base64 encoded image
+  receipt?: string; // Base64 encoded image - NOW OPTIONAL
 }
 
 export interface TripRecord {
