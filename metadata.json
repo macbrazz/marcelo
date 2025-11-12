@@ -1,6 +1,5 @@
-
 {
-  "name": "Controle de Despesas de Viagem",
+  "name": "Copy of Controle de Despesas de Viagem",
   "description": "Um aplicativo para uso em smartphone que controla despesas de viagem. Permite cadastrar despesas por categoria e anexar notas fiscais usando a câmera do celular.",
   "requestFramePermissions": [
     "camera"
