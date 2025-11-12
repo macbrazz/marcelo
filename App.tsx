@@ -69,7 +69,6 @@ const ReportModal: React.FC<{
                 }
 
             } else if (type === 'receipts') {
-                const expensesWithReceipts = expenses.filter(exp => exp.receipt);
                 if (expenses.length === 0) {
                     alert('Não há despesas para gerar um relatório de comprovantes.');
                     setIsGenerating(false);
