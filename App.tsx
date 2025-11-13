@@ -1,9 +1,10 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Trip, Expense, TripRecord } from './types';
 import TripSetup from './components/TripSetup';
 import ExpenseTracker from './components/ExpenseTracker';
 import TripHistory from './components/TripHistory';
+import * as db from './db';
 
 // To satisfy TypeScript since jsPDF is loaded from a script tag
 declare const window: any;
@@ -188,25 +189,17 @@ const App: React.FC = () => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Load trips from localStorage on initial render
+  // Load trips from IndexedDB on initial render
   useEffect(() => {
-    try {
-      const storedTrips = localStorage.getItem('travelApp-allTrips');
-      if (storedTrips) {
-        setAllTrips(JSON.parse(storedTrips));
+    const loadTrips = async () => {
+      try {
+        const storedTrips = await db.getAllTrips();
+        setAllTrips(storedTrips);
+      } catch (error) {
+        console.error("Could not load trips from DB:", error);
       }
-    } catch (error) {
-      console.error("Could not load trips from localStorage:", error);
-    }
-  }, []);
-
-  // Save trips to localStorage whenever they change
-  const saveTrips = useCallback((trips: TripRecord[]) => {
-    try {
-      localStorage.setItem('travelApp-allTrips', JSON.stringify(trips));
-    } catch (error) {
-      console.error("Could not save trips to localStorage:", error);
-    }
+    };
+    loadTrips();
   }, []);
 
   const handleTripStart = (trip: Trip) => {
@@ -219,7 +212,7 @@ const App: React.FC = () => {
     setExpenses(prev => [...prev, { ...expense, id: Date.now() }]);
   };
 
-  const handleEndTrip = () => {
+  const handleEndTrip = async () => {
       if (!activeTrip) return;
 
       const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
@@ -230,9 +223,12 @@ const App: React.FC = () => {
           total,
       };
 
-      const updatedTrips = [...allTrips, newTripRecord];
-      setAllTrips(updatedTrips);
-      saveTrips(updatedTrips);
+      try {
+          await db.addTrip(newTripRecord);
+          setAllTrips(prev => [...prev, newTripRecord]);
+      } catch (error) {
+          console.error("Could not save trip to DB:", error);
+      }
 
       // Reset state
       setActiveTrip(null);
@@ -240,10 +236,13 @@ const App: React.FC = () => {
       setIsReportModalOpen(false);
   };
 
-  const handleDeleteTrip = (tripId: number) => {
-    const updatedTrips = allTrips.filter(trip => trip.id !== tripId);
-    setAllTrips(updatedTrips);
-    saveTrips(updatedTrips);
+  const handleDeleteTrip = async (tripId: number) => {
+    try {
+        await db.deleteTrip(tripId);
+        setAllTrips(prev => prev.filter(trip => trip.id !== tripId));
+    } catch (error) {
+        console.error("Could not delete trip from DB:", error);
+    }
   };
 
   if (activeTrip) {
