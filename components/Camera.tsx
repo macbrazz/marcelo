@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback } from 'react';
 
 interface CameraProps {
   onCapture: (imageDataUrl: string) => void;
@@ -8,7 +8,6 @@ interface CameraProps {
 const Camera: React.FC<CameraProps> = ({ onCapture, onClose }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     let activeStream: MediaStream | null = null;
@@ -18,7 +17,6 @@ const Camera: React.FC<CameraProps> = ({ onCapture, onClose }) => {
           video: { facingMode: 'environment' }
         });
         activeStream = stream;
-        setStream(stream);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
