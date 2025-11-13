@@ -240,6 +240,12 @@ const App: React.FC = () => {
       setIsReportModalOpen(false);
   };
 
+  const handleDeleteTrip = (tripId: number) => {
+    const updatedTrips = allTrips.filter(trip => trip.id !== tripId);
+    setAllTrips(updatedTrips);
+    saveTrips(updatedTrips);
+  };
+
   if (activeTrip) {
     return (
         <>
@@ -272,7 +278,11 @@ const App: React.FC = () => {
 
   return (
     <>
-      <TripHistory trips={allTrips} onStartNewTrip={() => setIsSetupOpen(true)} />
+      <TripHistory
+        trips={allTrips}
+        onStartNewTrip={() => setIsSetupOpen(true)}
+        onDeleteTrip={handleDeleteTrip}
+      />
       <TripSetup 
         isOpen={isSetupOpen}
         onTripStart={handleTripStart}
