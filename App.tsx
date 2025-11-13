@@ -1,10 +1,12 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { Trip, Expense, TripRecord } from './types';
 import TripSetup from './components/TripSetup';
 import ExpenseTracker from './components/ExpenseTracker';
 import TripHistory from './components/TripHistory';
 import * as db from './db';
+import PdfPreviewModal from './components/PdfPreviewModal';
 
 // To satisfy TypeScript since jsPDF is loaded from a script tag
 declare const window: any;
@@ -20,138 +22,102 @@ const ReportModal: React.FC<{
     onClose: () => void;
     onEndTrip: () => void;
     setIsGenerating: (isGenerating: boolean) => void;
-}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
+    setPdfPreviewUri: (uri: string) => void;
+}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating, setPdfPreviewUri }) => {
 
     const generatePdf = async (type: 'summary' | 'receipts') => {
         setIsGenerating(true);
         await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI to update
 
         try {
-          const { jsPDF } = window.jspdf;
+            const { jsPDF } = window.jspdf;
+            const isStandalone = ('standalone' in window.navigator && (window.navigator as any).standalone) || window.matchMedia('(display-mode: standalone)').matches;
 
-          if (type === 'summary') {
-              const summaryDoc = new jsPDF();
+            let doc: any;
 
-              summaryDoc.setFontSize(22);
-              summaryDoc.text("Relatório de Despesas de Viagem", 105, 20, { align: 'center' });
+            if (type === 'summary') {
+                const summaryDoc = new jsPDF();
+                summaryDoc.setFontSize(22);
+                summaryDoc.text("Relatório de Despesas de Viagem", 105, 20, { align: 'center' });
+                summaryDoc.setFontSize(12);
+                summaryDoc.text(`Destino: ${trip.destination}`, 15, 40);
+                summaryDoc.text(`Participantes: ${trip.participants}`, 15, 48);
+                summaryDoc.text(`Data de Início: ${new Date(trip.date + 'T00:00:00').toLocaleDateString('pt-BR')}`, 15, 56);
+                const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+                summaryDoc.setFontSize(16);
+                summaryDoc.text(`Total de Despesas: R$ ${total.toFixed(2).replace('.', ',')}`, 15, 70);
 
-              summaryDoc.setFontSize(12);
-              summaryDoc.text(`Destino: ${trip.destination}`, 15, 40);
-              summaryDoc.text(`Participantes: ${trip.participants}`, 15, 48);
-              summaryDoc.text(
-                  `Data de Início: ${new Date(trip.date + 'T00:00:00').toLocaleDateString('pt-BR')}`,
-                  15,
-                  56
-              );
-
-              const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-              summaryDoc.setFontSize(16);
-              summaryDoc.text(
-                  `Total de Despesas: R$ ${total.toFixed(2).replace('.', ',')}`,
-                  15,
-                  70
-              );
-
-              if (expenses.length > 0) {
-                  summaryDoc.setFontSize(14);
-                  summaryDoc.text("Lista de Despesas", 15, 85);
-
-                  let yPos = 95;
-                  expenses.forEach((exp, index) => {
-                      if (yPos > 270) {
-                          summaryDoc.addPage();
-                          yPos = 20;
-                      }
-                      summaryDoc.setFontSize(11);
-                      summaryDoc.text(
-                          `${index + 1}. ${exp.category}: R$ ${exp.amount.toFixed(2).replace('.', ',')}`,
-                          20,
-                          yPos
-                      );
-                      yPos += 7;
-                  });
-              } else {
-                  summaryDoc.setFontSize(12);
-                  summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
-              }
-
-              if (isMobile()) {
-                  const pdfDataUri = summaryDoc.output('datauristring');
-                  window.open(pdfDataUri, '_blank');
-              } else {
-                  summaryDoc.save(`resumo_viagem_${trip.destination}.pdf`);
-              }
-
-          } else if (type === 'receipts') {
-              const receiptsDoc = new jsPDF();
-
-              receiptsDoc.setFontSize(22);
-              receiptsDoc.text("Comprovantes da Viagem", 105, 15, { align: 'center' });
-              receiptsDoc.setFontSize(10);
-              receiptsDoc.text(`Destino: ${trip.destination}`, 105, 22, { align: 'center' });
-
-              if (expenses.length === 0) {
-                  // Gera um PDF válido mesmo sem despesas
-                  receiptsDoc.setFontSize(12);
-                  receiptsDoc.text("Nenhuma despesa cadastrada para esta viagem.", 105, 60, { align: 'center' });
-
-                  if (isMobile()) {
-                      const pdfDataUri = receiptsDoc.output('datauristring');
-                      window.open(pdfDataUri, '_blank');
-                  } else {
-                      receiptsDoc.save(`comprovantes_viagem_${trip.destination}.pdf`);
-                  }
-              } else {
-                  expenses.forEach((exp, index) => {
-                      if (index > 0) receiptsDoc.addPage();
-
-                      receiptsDoc.setFontSize(12);
-                      receiptsDoc.text(
-                          `Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`,
-                          15,
-                          30
-                      );
-
-                      if (exp.receipt) {
-                        try {
-                          const src = String(exp.receipt);
-
-                          // Detecta o formato a partir do DataURL; padrão = JPEG
-                          const format =
-                            src.startsWith('data:image/png') ? 'PNG' :
-                            (src.startsWith('data:image/jpeg') || src.startsWith('data:image/jpg')) ? 'JPEG' :
-                            'JPEG';
-
-                          // A4 com margem simples
-                          const x = 15, y = 40, w = 180, h = 230;
-
-                          receiptsDoc.addImage(src, format as any, x, y, w, h, undefined, 'FAST');
-                        } catch (e) {
-                          console.error('Error adding image to PDF: ', e, { receiptType: typeof exp.receipt });
-                          receiptsDoc.setFontSize(11);
-                          receiptsDoc.text('Erro ao carregar a imagem do comprovante.', 15, 50);
+                if (expenses.length > 0) {
+                    summaryDoc.setFontSize(14);
+                    summaryDoc.text("Lista de Despesas", 15, 85);
+                    let yPos = 95;
+                    expenses.forEach((exp, index) => {
+                        if (yPos > 270) {
+                            summaryDoc.addPage();
+                            yPos = 20;
                         }
-                      } else {
-                        receiptsDoc.setFontSize(16);
-                        receiptsDoc.text('Sem comprovante fiscal para esta despesa.', 105, 150, { align: 'center' });
-                      }
-                  });
+                        summaryDoc.setFontSize(11);
+                        summaryDoc.text(`${index + 1}. ${exp.category}: R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 20, yPos);
+                        yPos += 7;
+                    });
+                } else {
+                    summaryDoc.setFontSize(12);
+                    summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
+                }
+                doc = summaryDoc;
 
-                  if (isMobile()) {
-                      const pdfDataUri = receiptsDoc.output('datauristring');
-                      window.open(pdfDataUri, '_blank');
-                  } else {
-                      receiptsDoc.save(`comprovantes_viagem_${trip.destination}.pdf`);
-                  }
-              }
-          }
-      } catch (error) {
-          console.error("Failed to generate PDF:", error);
-          alert("Ocorreu um erro ao gerar o PDF. Verifique o console para mais detalhes.");
-      } finally {
-          setIsGenerating(false);
-      }
+            } else { // type === 'receipts'
+                const receiptsDoc = new jsPDF();
+                receiptsDoc.setFontSize(22);
+                receiptsDoc.text("Comprovantes da Viagem", 105, 15, { align: 'center' });
+                receiptsDoc.setFontSize(10);
+                receiptsDoc.text(`Destino: ${trip.destination}`, 105, 22, { align: 'center' });
 
+                const receipts = expenses.filter(exp => exp.receipt);
+
+                if (receipts.length === 0) {
+                    receiptsDoc.setFontSize(12);
+                    receiptsDoc.text("Nenhum comprovante fiscal cadastrado para esta viagem.", 105, 60, { align: 'center' });
+                } else {
+                    receipts.forEach((exp, index) => {
+                        if (index > 0) receiptsDoc.addPage();
+                        receiptsDoc.setFontSize(12);
+                        receiptsDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 30);
+                        
+                        try {
+                            const src = String(exp.receipt);
+                            const format = src.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                            const x = 15, y = 40, w = 180, h = 230;
+                            receiptsDoc.addImage(src, format as any, x, y, w, h, undefined, 'FAST');
+                        } catch (e) {
+                            console.error('Error adding image to PDF: ', e);
+                            receiptsDoc.setFontSize(11);
+                            receiptsDoc.text('Erro ao carregar a imagem do comprovante.', 15, 50);
+                        }
+                    });
+                }
+                doc = receiptsDoc;
+            }
+
+            const fileName = `${type === 'summary' ? 'resumo' : 'comprovantes'}_viagem_${trip.destination}.pdf`;
+
+            if (isStandalone) {
+                const pdfDataUri = doc.output('datauristring');
+                setPdfPreviewUri(pdfDataUri);
+                onClose(); // Fecha o modal de seleção de relatório
+            } else if (isMobile()) {
+                const pdfDataUri = doc.output('datauristring');
+                window.open(pdfDataUri, '_blank');
+            } else {
+                doc.save(fileName);
+            }
+
+        } catch (error) {
+            console.error("Failed to generate PDF:", error);
+            alert("Ocorreu um erro ao gerar o PDF. Verifique o console para mais detalhes.");
+        } finally {
+            setIsGenerating(false);
+        }
     };
 
     return (
@@ -188,6 +154,8 @@ const App: React.FC = () => {
   const [isSetupOpen, setIsSetupOpen] = useState(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [pdfPreviewUri, setPdfPreviewUri] = useState<string | null>(null);
+
 
   // Load trips from IndexedDB on initial render
   useEffect(() => {
@@ -261,6 +229,7 @@ const App: React.FC = () => {
                     onClose={() => setIsReportModalOpen(false)}
                     onEndTrip={handleEndTrip}
                     setIsGenerating={setIsGenerating}
+                    setPdfPreviewUri={setPdfPreviewUri}
                 />
             )}
             {isGenerating && (
@@ -270,6 +239,12 @@ const App: React.FC = () => {
                         <p className="mt-4 text-indigo-800 font-semibold">Gerando relatório...</p>
                     </div>
                 </div>
+            )}
+            {pdfPreviewUri && (
+              <PdfPreviewModal
+                pdfDataUri={pdfPreviewUri}
+                onClose={() => setPdfPreviewUri(null)}
+              />
             )}
         </>
     );
