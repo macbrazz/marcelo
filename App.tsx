@@ -276,6 +276,10 @@ const App: React.FC = () => {
         setExpenses([]);
         setIsReportModalOpen(false);
     }, [currentTrip, expenses]);
+
+    const handleDeleteTrip = (tripId: number) => {
+        setTripHistory(prev => prev.filter(trip => trip.id !== tripId));
+    };
     
     // On initial load, if there's no active trip and no history, open the setup modal.
     useEffect(() => {
@@ -330,6 +334,7 @@ const App: React.FC = () => {
                 <TripHistory
                     trips={tripHistory}
                     onStartNewTrip={() => setIsTripSetupOpen(true)}
+                    onDeleteTrip={handleDeleteTrip}
                 />
             )}
         </>

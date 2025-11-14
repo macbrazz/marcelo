@@ -1,13 +1,14 @@
 import React from 'react';
 import { TripRecord } from '../types';
-import { PlusIcon } from './icons';
+import { PlusIcon, TrashIcon } from './icons';
 
 interface TripHistoryProps {
   trips: TripRecord[];
   onStartNewTrip: () => void;
+  onDeleteTrip: (tripId: number) => void;
 }
 
-const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip }) => {
+const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip, onDeleteTrip }) => {
   return (
     <div className="min-h-screen bg-slate-100">
       <header className="bg-white shadow-md p-4 sticky top-0 z-10">
@@ -34,15 +35,28 @@ const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip }) => {
           <ul className="space-y-4">
             {[...trips].reverse().map((record) => (
               <li key={record.id} className="bg-white p-6 rounded-xl shadow-md transition-transform hover:scale-[1.02] hover:shadow-lg">
-                <div className="flex justify-between items-start">
+                <div className="flex justify-between items-center">
                   <div>
                     <p className="text-xs text-slate-500">{new Date(record.trip.date + 'T00:00:00').toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     <h3 className="text-2xl font-bold text-slate-800">{record.trip.destination}</h3>
                     <p className="text-sm text-slate-600">com {record.trip.participants}</p>
                   </div>
-                  <div className="text-right flex-shrink-0 ml-4">
-                    <p className="text-sm text-slate-500">Total Gasto</p>
-                    <p className="text-2xl font-extrabold text-indigo-600">R$ {record.total.toFixed(2).replace('.', ',')}</p>
+                  <div className="flex-shrink-0 ml-4 flex items-center gap-4">
+                    <div className="text-right">
+                      <p className="text-sm text-slate-500">Total Gasto</p>
+                      <p className="text-2xl font-extrabold text-indigo-600">R$ {record.total.toFixed(2).replace('.', ',')}</p>
+                    </div>
+                     <button
+                        onClick={() => {
+                            if (window.confirm('Tem certeza que deseja excluir esta viagem? Esta ação não pode ser desfeita.')) {
+                                onDeleteTrip(record.id);
+                            }
+                        }}
+                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                        aria-label="Excluir viagem"
+                        >
+                        <TrashIcon className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
               </li>
