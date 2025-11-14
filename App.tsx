@@ -12,6 +12,10 @@ const isMobile = () => {
   return /Mobi|Android|iPhone/i.test(navigator.userAgent) || ('ontouchstart' in window);
 };
 
+// Helper function to specifically detect iOS devices
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+
 const ReportModal: React.FC<{
     trip: Trip;
     expenses: Expense[];
@@ -21,21 +25,40 @@ const ReportModal: React.FC<{
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
-        // For PWA/mobile, using a data URI is often more reliable than blobs.
+        // iOS has unique challenges, especially in PWA mode.
+        // Opening in a new tab is the most reliable cross-context (browser/PWA) solution.
+        if (isIOS()) {
+            try {
+                // This tells jsPDF to open the generated PDF in a new window/tab.
+                // The user can then use Safari's native share/save functionality.
+                doc.output('dataurlnewwindow');
+            } catch (e) {
+                console.error("Failed to open PDF for iOS:", e);
+                alert("Não foi possível exibir o PDF. Por favor, tente usar o app no navegador Safari.");
+            }
+            return; // Important to stop here for iOS
+        }
+
+        // For other mobile devices (Android) and PWAs, creating a download link is effective.
         if (isMobile() || window.matchMedia('(display-mode: standalone)').matches) {
             try {
-                const dataUri = doc.output('datauristring');
+                // Using a blob is more performant than a large data URI.
+                const blob = doc.output('blob');
+                const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
-                link.href = dataUri;
+                link.href = url;
                 link.download = filename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+                // Revoke the object URL to free up memory.
+                URL.revokeObjectURL(url);
             } catch (e) {
-                console.error("Download failed:", e);
+                console.error("Download failed on mobile:", e);
                 alert("Não foi possível baixar o PDF. Tente abrir o aplicativo no navegador do seu celular.");
             }
         } else {
+            // Standard desktop download.
             doc.save(filename);
         }
     };
