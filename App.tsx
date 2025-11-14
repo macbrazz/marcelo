@@ -12,10 +12,6 @@ const isMobile = () => {
   return /Mobi|Android|iPhone/i.test(navigator.userAgent) || ('ontouchstart' in window);
 };
 
-// Helper function to specifically detect iOS devices
-const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
-
 const ReportModal: React.FC<{
     trip: Trip;
     expenses: Expense[];
@@ -25,41 +21,27 @@ const ReportModal: React.FC<{
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
-        // iOS has unique challenges, especially in PWA mode.
-        // Opening in a new tab is the most reliable cross-context (browser/PWA) solution.
-        if (isIOS()) {
+        // On mobile devices, the most reliable way to let the user save the file
+        // is to open it in a new tab, where they can use the browser's/OS's
+        // native "Share" or "Save to Files" functionality. This avoids silent
+        // downloads to hidden folders and works consistently across iOS/Android and PWA/browser modes.
+        if (isMobile()) {
             try {
-                // This tells jsPDF to open the generated PDF in a new window/tab.
-                // The user can then use Safari's native share/save functionality.
-                doc.output('dataurlnewwindow');
+                // This opens the generated PDF in a new window/tab.
+                doc.output('dataurlnewwindow', { filename: filename });
             } catch (e) {
-                console.error("Failed to open PDF for iOS:", e);
-                alert("Não foi possível exibir o PDF. Por favor, tente usar o app no navegador Safari.");
+                console.error("Failed to open PDF on mobile:", e);
+                alert("Não foi possível exibir o PDF. Por favor, tente usar o app diretamente no navegador.");
             }
-            return; // Important to stop here for iOS
+            return;
         }
 
-        // For other mobile devices (Android) and PWAs, creating a download link is effective.
-        if (isMobile() || window.matchMedia('(display-mode: standalone)').matches) {
-            try {
-                // Using a blob is more performant than a large data URI.
-                const blob = doc.output('blob');
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = filename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                // Revoke the object URL to free up memory.
-                URL.revokeObjectURL(url);
-            } catch (e) {
-                console.error("Download failed on mobile:", e);
-                alert("Não foi possível baixar o PDF. Tente abrir o aplicativo no navegador do seu celular.");
-            }
-        } else {
-            // Standard desktop download.
+        // For desktop browsers, a direct download is the best user experience.
+        try {
             doc.save(filename);
+        } catch(e) {
+            console.error("Failed to save PDF on desktop:", e);
+            alert("Ocorreu um erro ao salvar o PDF.");
         }
     };
 
@@ -253,18 +235,6 @@ const App: React.FC = () => {
         }
     }, [currentTrip]);
 
-    // Save expenses of the current trip to localStorage
-    useEffect(() => {
-        try {
-            // Only save expenses if there is an active trip.
-            if (currentTrip) {
-                localStorage.setItem('currentExpenses', JSON.stringify(expenses));
-            }
-        } catch (error) {
-            console.error("Failed to save expenses to localStorage", error);
-        }
-    }, [expenses, currentTrip]);
-
     // Save trip history to localStorage
     useEffect(() => {
         try {
@@ -279,15 +249,32 @@ const App: React.FC = () => {
     const handleStartTrip = (trip: Trip) => {
         setCurrentTrip(trip);
         setExpenses([]); // Reset expenses for new trip
+        // Persist the empty expenses array for the new trip
+        try {
+            localStorage.setItem('currentExpenses', '[]');
+        } catch (error) {
+            console.error("Failed to clear expenses in localStorage", error);
+        }
         setIsTripSetupOpen(false);
     };
 
     const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
         const newExpense: Expense = {
             ...expense,
-            id: Date.now(), // simple unique id
+            id: Date.now(),
         };
-        setExpenses(prevExpenses => [...prevExpenses, newExpense]);
+        setExpenses(prevExpenses => {
+            const updatedExpenses = [...prevExpenses, newExpense];
+            // Synchronously save to localStorage to prevent data loss on app close
+            try {
+                if (currentTrip) {
+                    localStorage.setItem('currentExpenses', JSON.stringify(updatedExpenses));
+                }
+            } catch (error) {
+                console.error("Failed to save expenses to localStorage", error);
+            }
+            return updatedExpenses;
+        });
     };
 
     const handleEndTrip = useCallback(() => {
