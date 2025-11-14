@@ -1,12 +1,8 @@
-
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Trip, Expense, TripRecord } from './types';
 import TripSetup from './components/TripSetup';
 import ExpenseTracker from './components/ExpenseTracker';
 import TripHistory from './components/TripHistory';
-import * as db from './db';
-import PdfPreviewModal from './components/PdfPreviewModal';
 
 // To satisfy TypeScript since jsPDF is loaded from a script tag
 declare const window: any;
@@ -22,8 +18,7 @@ const ReportModal: React.FC<{
     onClose: () => void;
     onEndTrip: () => void;
     setIsGenerating: (isGenerating: boolean) => void;
-    setPdfPreviewUri: (uri: string) => void;
-}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating, setPdfPreviewUri }) => {
+}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const generatePdf = async (type: 'summary' | 'receipts') => {
         setIsGenerating(true);
@@ -31,22 +26,22 @@ const ReportModal: React.FC<{
 
         try {
             const { jsPDF } = window.jspdf;
-            const isStandalone = ('standalone' in window.navigator && (window.navigator as any).standalone) || window.matchMedia('(display-mode: standalone)').matches;
-
-            let doc: any;
 
             if (type === 'summary') {
                 const summaryDoc = new jsPDF();
+                
                 summaryDoc.setFontSize(22);
                 summaryDoc.text("Relatório de Despesas de Viagem", 105, 20, { align: 'center' });
+                
                 summaryDoc.setFontSize(12);
                 summaryDoc.text(`Destino: ${trip.destination}`, 15, 40);
                 summaryDoc.text(`Participantes: ${trip.participants}`, 15, 48);
                 summaryDoc.text(`Data de Início: ${new Date(trip.date + 'T00:00:00').toLocaleDateString('pt-BR')}`, 15, 56);
+                
                 const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
                 summaryDoc.setFontSize(16);
                 summaryDoc.text(`Total de Despesas: R$ ${total.toFixed(2).replace('.', ',')}`, 15, 70);
-
+                
                 if (expenses.length > 0) {
                     summaryDoc.setFontSize(14);
                     summaryDoc.text("Lista de Despesas", 15, 85);
@@ -61,84 +56,97 @@ const ReportModal: React.FC<{
                         yPos += 7;
                     });
                 } else {
-                    summaryDoc.setFontSize(12);
-                    summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
+                     summaryDoc.setFontSize(12);
+                     summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
                 }
-                doc = summaryDoc;
 
-            } else { // type === 'receipts'
+                if (isMobile()) {
+                    const pdfDataUri = summaryDoc.output('datauristring');
+                    window.open(pdfDataUri, '_blank');
+                } else {
+                    summaryDoc.save(`resumo_viagem_${trip.destination}.pdf`);
+                }
+
+            } else if (type === 'receipts') {
+                const receiptsWithImages = expenses.filter(exp => exp.receipt);
+                if (receiptsWithImages.length === 0) {
+                    alert('Nenhuma despesa com comprovante anexado foi encontrada.');
+                    setIsGenerating(false);
+                    return;
+                }
+
                 const receiptsDoc = new jsPDF();
                 receiptsDoc.setFontSize(22);
                 receiptsDoc.text("Comprovantes da Viagem", 105, 15, { align: 'center' });
                 receiptsDoc.setFontSize(10);
                 receiptsDoc.text(`Destino: ${trip.destination}`, 105, 22, { align: 'center' });
 
-                const receipts = expenses.filter(exp => exp.receipt);
+                receiptsWithImages.forEach((exp, index) => {
+                    if (index > 0) receiptsDoc.addPage();
 
-                if (receipts.length === 0) {
                     receiptsDoc.setFontSize(12);
-                    receiptsDoc.text("Nenhum comprovante fiscal cadastrado para esta viagem.", 105, 60, { align: 'center' });
-                } else {
-                    receipts.forEach((exp, index) => {
-                        if (index > 0) receiptsDoc.addPage();
-                        receiptsDoc.setFontSize(12);
-                        receiptsDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 30);
-                        
+                    receiptsDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 20);
+                    
+                    if (exp.receipt) {
                         try {
-                            const src = String(exp.receipt);
-                            const format = src.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-                            const x = 15, y = 40, w = 180, h = 230;
-                            receiptsDoc.addImage(src, format as any, x, y, w, h, undefined, 'FAST');
-                        } catch (e) {
-                            console.error('Error adding image to PDF: ', e);
-                            receiptsDoc.setFontSize(11);
-                            receiptsDoc.text('Erro ao carregar a imagem do comprovante.', 15, 50);
+                             // Dimensions for the image, maintaining aspect ratio
+                            const img = new Image();
+                            img.src = exp.receipt;
+                            const imgProps = receiptsDoc.getImageProperties(img.src);
+                            const pdfWidth = receiptsDoc.internal.pageSize.getWidth();
+                            const pdfHeight = receiptsDoc.internal.pageSize.getHeight();
+                            const margin = 15;
+                            const availableWidth = pdfWidth - 2 * margin;
+                            const availableHeight = pdfHeight - 40; // Space for header
+                            const aspectRatio = imgProps.width / imgProps.height;
+                            let imgWidth = availableWidth;
+                            let imgHeight = imgWidth / aspectRatio;
+                            if (imgHeight > availableHeight) {
+                                imgHeight = availableHeight;
+                                imgWidth = imgHeight * aspectRatio;
+                            }
+                            const x = (pdfWidth - imgWidth) / 2;
+                            receiptsDoc.addImage(exp.receipt, 'JPEG', x, 30, imgWidth, imgHeight);
+                        } catch(e) {
+                            console.error("Error adding image to PDF:", e);
+                            receiptsDoc.text("Erro ao carregar imagem do comprovante.", 15, 40);
                         }
-                    });
+                    }
+                });
+                
+                if (isMobile()) {
+                    const pdfDataUri = receiptsDoc.output('datauristring');
+                    window.open(pdfDataUri, '_blank');
+                } else {
+                    receiptsDoc.save(`comprovantes_viagem_${trip.destination}.pdf`);
                 }
-                doc = receiptsDoc;
             }
-
-            const fileName = `${type === 'summary' ? 'resumo' : 'comprovantes'}_viagem_${trip.destination}.pdf`;
-
-            if (isStandalone) {
-                const pdfDataUri = doc.output('datauristring');
-                setPdfPreviewUri(pdfDataUri);
-                onClose(); // Fecha o modal de seleção de relatório
-            } else if (isMobile()) {
-                const pdfDataUri = doc.output('datauristring');
-                window.open(pdfDataUri, '_blank');
-            } else {
-                doc.save(fileName);
-            }
-
         } catch (error) {
-            console.error("Failed to generate PDF:", error);
-            alert("Ocorreu um erro ao gerar o PDF. Verifique o console para mais detalhes.");
+            console.error('Failed to generate PDF:', error);
+            alert('Ocorreu um erro ao gerar o PDF.');
         } finally {
             setIsGenerating(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-lg w-full max-w-sm p-6 text-center animate-fade-in-up">
-                <h2 className="text-2xl font-bold text-slate-800 mb-4">Gerar Relatórios</h2>
-                <p className="text-slate-500 mb-6">Escolha qual relatório você deseja visualizar.</p>
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+            <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 text-center animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-2xl font-bold text-slate-800 mb-4">Finalizar Viagem</h2>
+                <p className="text-slate-500 mb-6">Gere relatórios ou encerre a viagem atual. A viagem será salva no seu histórico.</p>
                 <div className="space-y-3">
-                    <button onClick={() => generatePdf('summary')} className="w-full bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-600 transition">
-                        Resumo da Viagem
+                    <button onClick={() => generatePdf('summary')} className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
+                        Gerar Resumo (PDF)
                     </button>
-                    <button onClick={() => generatePdf('receipts')} className="w-full bg-cyan-500 text-white py-3 rounded-lg font-semibold hover:bg-cyan-600 transition">
-                        Comprovantes Fiscais
+                    <button onClick={() => generatePdf('receipts')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
+                        Gerar Comprovantes (PDF)
+                    </button>
+                    <button onClick={onEndTrip} className="w-full py-3 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition mt-4">
+                        Encerrar e Salvar Viagem
                     </button>
                 </div>
-                <hr className="my-6 border-slate-200" />
-                <button onClick={onEndTrip} className="w-full bg-red-500 text-white py-3 rounded-lg font-semibold hover:bg-red-600 transition">
-                    Encerrar Viagem e Salvar
-                </button>
-                <button onClick={onClose} className="mt-4 text-sm text-slate-500 hover:text-slate-700">
-                    Voltar
+                <button onClick={onClose} className="mt-6 text-slate-500 hover:text-slate-700 text-sm">
+                    Cancelar
                 </button>
             </div>
         </div>
@@ -147,123 +155,173 @@ const ReportModal: React.FC<{
 
 
 const App: React.FC = () => {
-  const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [allTrips, setAllTrips] = useState<TripRecord[]>([]);
+    // Initialize state from localStorage
+    const [currentTrip, setCurrentTrip] = useState<Trip | null>(() => {
+        try {
+            const storedTrip = localStorage.getItem('currentTrip');
+            return storedTrip ? JSON.parse(storedTrip) : null;
+        } catch (error) {
+            console.error("Failed to load trip from localStorage", error);
+            return null;
+        }
+    });
+    
+    const [expenses, setExpenses] = useState<Expense[]>(() => {
+        try {
+            // Only load expenses if there is a current trip
+            if (localStorage.getItem('currentTrip')) {
+                const storedExpenses = localStorage.getItem('currentExpenses');
+                return storedExpenses ? JSON.parse(storedExpenses) : [];
+            }
+            return [];
+        } catch (error) {
+            console.error("Failed to load expenses from localStorage", error);
+            return [];
+        }
+    });
 
-  const [isSetupOpen, setIsSetupOpen] = useState(false);
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [pdfPreviewUri, setPdfPreviewUri] = useState<string | null>(null);
+    const [tripHistory, setTripHistory] = useState<TripRecord[]>(() => {
+        try {
+            const storedHistory = localStorage.getItem('tripHistory');
+            return storedHistory ? JSON.parse(storedHistory) : [];
+        } catch (error) {
+            console.error("Failed to load trip history from localStorage", error);
+            return [];
+        }
+    });
 
+    const [isTripSetupOpen, setIsTripSetupOpen] = useState(false);
+    const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
 
-  // Load trips from IndexedDB on initial render
-  useEffect(() => {
-    const loadTrips = async () => {
-      try {
-        const storedTrips = await db.getAllTrips();
-        setAllTrips(storedTrips);
-      } catch (error) {
-        console.error("Could not load trips from DB:", error);
-      }
+    // --- Data Persistence Effects ---
+
+    // Save current trip state to localStorage
+    useEffect(() => {
+        try {
+            if (currentTrip) {
+                localStorage.setItem('currentTrip', JSON.stringify(currentTrip));
+            } else {
+                // When trip ends, clear both trip and its expenses from storage
+                localStorage.removeItem('currentTrip');
+                localStorage.removeItem('currentExpenses');
+            }
+        } catch (error) {
+            console.error("Failed to save current trip to localStorage", error);
+        }
+    }, [currentTrip]);
+
+    // Save expenses of the current trip to localStorage
+    useEffect(() => {
+        try {
+            // Only save expenses if there is an active trip.
+            if (currentTrip) {
+                localStorage.setItem('currentExpenses', JSON.stringify(expenses));
+            }
+        } catch (error) {
+            console.error("Failed to save expenses to localStorage", error);
+        }
+    }, [expenses, currentTrip]);
+
+    // Save trip history to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('tripHistory', JSON.stringify(tripHistory));
+        } catch (error) {
+            console.error("Failed to save trip history to localStorage", error);
+        }
+    }, [tripHistory]);
+    
+    // --- App Logic ---
+
+    const handleStartTrip = (trip: Trip) => {
+        setCurrentTrip(trip);
+        setExpenses([]); // Reset expenses for new trip
+        setIsTripSetupOpen(false);
     };
-    loadTrips();
-  }, []);
 
-  const handleTripStart = (trip: Trip) => {
-    setActiveTrip(trip);
-    setExpenses([]);
-    setIsSetupOpen(false);
-  };
+    const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
+        const newExpense: Expense = {
+            ...expense,
+            id: Date.now(), // simple unique id
+        };
+        setExpenses(prevExpenses => [...prevExpenses, newExpense]);
+    };
 
-  const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
-    setExpenses(prev => [...prev, { ...expense, id: Date.now() }]);
-  };
+    const handleEndTrip = useCallback(() => {
+        if (!currentTrip) return;
 
-  const handleEndTrip = async () => {
-      if (!activeTrip) return;
+        const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+        const newTripRecord: TripRecord = {
+            id: Date.now(),
+            trip: currentTrip,
+            expenses: expenses,
+            total: total,
+        };
 
-      const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-      const newTripRecord: TripRecord = {
-          id: Date.now(),
-          trip: activeTrip,
-          expenses,
-          total,
-      };
+        setTripHistory(prev => [...prev, newTripRecord]);
+        setCurrentTrip(null);
+        setExpenses([]);
+        setIsReportModalOpen(false);
+    }, [currentTrip, expenses]);
+    
+    // On initial load, if there's no active trip and no history, open the setup modal.
+    useEffect(() => {
+        const hasActiveTrip = !!localStorage.getItem('currentTrip');
+        const storedHistory = localStorage.getItem('tripHistory');
+        const hasHistory = storedHistory && JSON.parse(storedHistory).length > 0;
+        if (!hasActiveTrip && !hasHistory) {
+            setIsTripSetupOpen(true);
+        }
+    }, []);
 
-      try {
-          await db.addTrip(newTripRecord);
-          setAllTrips(prev => [...prev, newTripRecord]);
-      } catch (error) {
-          console.error("Could not save trip to DB:", error);
-      }
-
-      // Reset state
-      setActiveTrip(null);
-      setExpenses([]);
-      setIsReportModalOpen(false);
-  };
-
-  const handleDeleteTrip = async (tripId: number) => {
-    try {
-        await db.deleteTrip(tripId);
-        setAllTrips(prev => prev.filter(trip => trip.id !== tripId));
-    } catch (error) {
-        console.error("Could not delete trip from DB:", error);
-    }
-  };
-
-  if (activeTrip) {
+    // --- Render Logic ---
+    
     return (
         <>
-            <ExpenseTracker
-                trip={activeTrip}
-                expenses={expenses}
-                onAddExpense={handleAddExpense}
-                onShowReportModal={() => setIsReportModalOpen(true)}
+            {isGenerating && (
+                <div className="fixed inset-0 bg-white bg-opacity-80 z-[100] flex items-center justify-center">
+                    <div className="text-center">
+                        <svg className="animate-spin h-10 w-10 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="mt-3 text-slate-700 font-semibold">Gerando PDF...</p>
+                    </div>
+                </div>
+            )}
+
+            <TripSetup 
+                isOpen={isTripSetupOpen} 
+                onTripStart={handleStartTrip} 
+                onClose={() => setIsTripSetupOpen(false)} 
             />
-            {isReportModalOpen && (
-                <ReportModal
-                    trip={activeTrip}
+
+            {isReportModalOpen && currentTrip && (
+                <ReportModal 
+                    trip={currentTrip}
                     expenses={expenses}
                     onClose={() => setIsReportModalOpen(false)}
                     onEndTrip={handleEndTrip}
                     setIsGenerating={setIsGenerating}
-                    setPdfPreviewUri={setPdfPreviewUri}
                 />
             )}
-            {isGenerating && (
-                 <div className="fixed inset-0 bg-white bg-opacity-80 z-50 flex items-center justify-center">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
-                        <p className="mt-4 text-indigo-800 font-semibold">Gerando relatório...</p>
-                    </div>
-                </div>
-            )}
-            {pdfPreviewUri && (
-              <PdfPreviewModal
-                pdfDataUri={pdfPreviewUri}
-                onClose={() => setPdfPreviewUri(null)}
-              />
+
+            {currentTrip ? (
+                <ExpenseTracker
+                    trip={currentTrip}
+                    expenses={expenses}
+                    onAddExpense={handleAddExpense}
+                    onShowReportModal={() => setIsReportModalOpen(true)}
+                />
+            ) : (
+                <TripHistory
+                    trips={tripHistory}
+                    onStartNewTrip={() => setIsTripSetupOpen(true)}
+                />
             )}
         </>
     );
-  }
-
-  return (
-    <>
-      <TripHistory
-        trips={allTrips}
-        onStartNewTrip={() => setIsSetupOpen(true)}
-        onDeleteTrip={handleDeleteTrip}
-      />
-      <TripSetup 
-        isOpen={isSetupOpen}
-        onTripStart={handleTripStart}
-        onClose={() => setIsSetupOpen(false)}
-      />
-    </>
-  );
 };
 
 export default App;
