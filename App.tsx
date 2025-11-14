@@ -7,23 +7,6 @@ import TripHistory from './components/TripHistory';
 // To satisfy TypeScript since jsPDF is loaded from a script tag
 declare const window: any;
 
-// Helper function to detect mobile devices
-const isMobile = () => {
-    // This regex is more specific to phones and tablets and less likely to be
-    // true on touch-enabled laptops.
-    const toMatch = [
-        /Android/i,
-        /webOS/i,
-        /iPhone/i,
-        /iPad/i,
-        /iPod/i,
-        /BlackBerry/i,
-        /Windows Phone/i
-    ];
-    return toMatch.some((toMatchItem) => navigator.userAgent.match(toMatchItem));
-};
-
-
 const ReportModal: React.FC<{
     trip: Trip;
     expenses: Expense[];
@@ -33,24 +16,19 @@ const ReportModal: React.FC<{
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
-        // For mobile, open in a new tab to use native OS sharing/saving.
-        if (isMobile()) {
-            try {
-                // This opens the generated PDF in a new window/tab.
-                doc.output('dataurlnewwindow', { filename: filename });
-            } catch (e) {
-                console.error("Failed to open PDF on mobile:", e);
-                alert("Não foi possível exibir o PDF. Por favor, tente usar o app diretamente no navegador.");
-            }
-            return;
-        }
-
-        // For desktop browsers, trigger a direct download.
         try {
+            // This is the preferred method. It triggers a "Save As" dialog on desktop
+            // and should trigger a download on modern mobile browsers.
             doc.save(filename);
-        } catch(e) {
-            console.error("Failed to save PDF on desktop:", e);
-            alert("Ocorreu um erro ao salvar o PDF.");
+        } catch (e) {
+            console.warn("doc.save() failed, falling back to opening in a new tab.", e);
+            try {
+                // Fallback for environments where .save() is not supported, like older mobile browsers or PWAs.
+                doc.output('dataurlnewwindow', { filename: filename });
+            } catch (e2) {
+                console.error("Fallback PDF method also failed:", e2);
+                alert("Ocorreu um erro ao gerar o PDF. Não foi possível baixar ou abrir o arquivo.");
+            }
         }
     };
 
@@ -244,6 +222,18 @@ const App: React.FC = () => {
         }
     }, [currentTrip]);
 
+    // Save expenses to localStorage whenever they change, but only if a trip is active.
+    useEffect(() => {
+        try {
+            if (currentTrip) {
+                localStorage.setItem('currentExpenses', JSON.stringify(expenses));
+            }
+        } catch (error) {
+            console.error("Failed to save expenses to localStorage", error);
+        }
+    }, [expenses, currentTrip]);
+
+
     // Save trip history to localStorage
     useEffect(() => {
         try {
@@ -257,13 +247,7 @@ const App: React.FC = () => {
 
     const handleStartTrip = (trip: Trip) => {
         setCurrentTrip(trip);
-        setExpenses([]); // Reset expenses for new trip
-        // Persist the empty expenses array for the new trip
-        try {
-            localStorage.setItem('currentExpenses', '[]');
-        } catch (error) {
-            console.error("Failed to clear expenses in localStorage", error);
-        }
+        setExpenses([]); // Reset expenses for new trip. The useEffect will persist this change.
         setIsTripSetupOpen(false);
     };
 
@@ -272,18 +256,8 @@ const App: React.FC = () => {
             ...expense,
             id: Date.now(),
         };
-        setExpenses(prevExpenses => {
-            const updatedExpenses = [...prevExpenses, newExpense];
-            // Synchronously save to localStorage to prevent data loss on app close
-            try {
-                if (currentTrip) {
-                    localStorage.setItem('currentExpenses', JSON.stringify(updatedExpenses));
-                }
-            } catch (error) {
-                console.error("Failed to save expenses to localStorage", error);
-            }
-            return updatedExpenses;
-        });
+        // The state update will trigger the useEffect to persist the data.
+        setExpenses(prevExpenses => [...prevExpenses, newExpense]);
     };
 
     const handleEndTrip = useCallback(() => {
