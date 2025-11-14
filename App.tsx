@@ -20,6 +20,23 @@ const ReportModal: React.FC<{
     setIsGenerating: (isGenerating: boolean) => void;
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
+    const downloadPdf = (doc: any, filename: string) => {
+        if (isMobile()) {
+            // Use blob for more reliable download on mobile
+            const pdfBlob = doc.output('blob');
+            const blobUrl = URL.createObjectURL(pdfBlob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl); // Clean up
+        } else {
+            doc.save(filename);
+        }
+    };
+
     const generatePdf = async (type: 'summary' | 'receipts') => {
         setIsGenerating(true);
         await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI to update
@@ -60,12 +77,7 @@ const ReportModal: React.FC<{
                      summaryDoc.text("Nenhuma despesa registrada.", 15, 85);
                 }
 
-                if (isMobile()) {
-                    const pdfDataUri = summaryDoc.output('datauristring');
-                    window.open(pdfDataUri, '_blank');
-                } else {
-                    summaryDoc.save(`resumo_viagem_${trip.destination}.pdf`);
-                }
+                downloadPdf(summaryDoc, `resumo_viagem_${trip.destination}.pdf`);
 
             } else if (type === 'receipts') {
                 const receiptsWithImages = expenses.filter(exp => exp.receipt);
@@ -114,12 +126,7 @@ const ReportModal: React.FC<{
                     }
                 });
                 
-                if (isMobile()) {
-                    const pdfDataUri = receiptsDoc.output('datauristring');
-                    window.open(pdfDataUri, '_blank');
-                } else {
-                    receiptsDoc.save(`comprovantes_viagem_${trip.destination}.pdf`);
-                }
+                downloadPdf(receiptsDoc, `comprovantes_viagem_${trip.destination}.pdf`);
             }
         } catch (error) {
             console.error('Failed to generate PDF:', error);
@@ -141,7 +148,12 @@ const ReportModal: React.FC<{
                     <button onClick={() => generatePdf('receipts')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
                         Gerar Comprovantes (PDF)
                     </button>
-                    <button onClick={onEndTrip} className="w-full py-3 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition mt-4">
+                    <div className="relative py-2">
+                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                            <div className="w-full border-t border-slate-200"></div>
+                        </div>
+                    </div>
+                    <button onClick={onEndTrip} className="w-full py-3 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition">
                         Encerrar e Salvar Viagem
                     </button>
                 </div>
