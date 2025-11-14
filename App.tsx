@@ -9,8 +9,20 @@ declare const window: any;
 
 // Helper function to detect mobile devices
 const isMobile = () => {
-  return /Mobi|Android|iPhone/i.test(navigator.userAgent) || ('ontouchstart' in window);
+    // This regex is more specific to phones and tablets and less likely to be
+    // true on touch-enabled laptops.
+    const toMatch = [
+        /Android/i,
+        /webOS/i,
+        /iPhone/i,
+        /iPad/i,
+        /iPod/i,
+        /BlackBerry/i,
+        /Windows Phone/i
+    ];
+    return toMatch.some((toMatchItem) => navigator.userAgent.match(toMatchItem));
 };
+
 
 const ReportModal: React.FC<{
     trip: Trip;
@@ -21,10 +33,7 @@ const ReportModal: React.FC<{
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
-        // On mobile devices, the most reliable way to let the user save the file
-        // is to open it in a new tab, where they can use the browser's/OS's
-        // native "Share" or "Save to Files" functionality. This avoids silent
-        // downloads to hidden folders and works consistently across iOS/Android and PWA/browser modes.
+        // For mobile, open in a new tab to use native OS sharing/saving.
         if (isMobile()) {
             try {
                 // This opens the generated PDF in a new window/tab.
@@ -36,7 +45,7 @@ const ReportModal: React.FC<{
             return;
         }
 
-        // For desktop browsers, a direct download is the best user experience.
+        // For desktop browsers, trigger a direct download.
         try {
             doc.save(filename);
         } catch(e) {
