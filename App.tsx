@@ -21,23 +21,26 @@ const ReportModal: React.FC<{
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
-        if (isMobile()) {
-            // Use blob for more reliable download on mobile
-            const pdfBlob = doc.output('blob');
-            const blobUrl = URL.createObjectURL(pdfBlob);
-            const link = document.createElement('a');
-            link.href = blobUrl;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(blobUrl); // Clean up
+        // For PWA/mobile, using a data URI is often more reliable than blobs.
+        if (isMobile() || window.matchMedia('(display-mode: standalone)').matches) {
+            try {
+                const dataUri = doc.output('datauristring');
+                const link = document.createElement('a');
+                link.href = dataUri;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (e) {
+                console.error("Download failed:", e);
+                alert("Não foi possível baixar o PDF. Tente abrir o aplicativo no navegador do seu celular.");
+            }
         } else {
             doc.save(filename);
         }
     };
 
-    const generatePdf = async (type: 'summary' | 'receipts') => {
+    const generatePdf = async (type: 'summary' | 'detailed') => {
         setIsGenerating(true);
         await new Promise(resolve => setTimeout(resolve, 50)); // Allow UI to update
 
@@ -79,34 +82,33 @@ const ReportModal: React.FC<{
 
                 downloadPdf(summaryDoc, `resumo_viagem_${trip.destination}.pdf`);
 
-            } else if (type === 'receipts') {
-                const receiptsWithImages = expenses.filter(exp => exp.receipt);
-                if (receiptsWithImages.length === 0) {
-                    alert('Nenhuma despesa com comprovante anexado foi encontrada.');
+            } else if (type === 'detailed') {
+                if (expenses.length === 0) {
+                    alert('Nenhuma despesa foi registrada para gerar o relatório.');
                     setIsGenerating(false);
                     return;
                 }
 
-                const receiptsDoc = new jsPDF();
-                receiptsDoc.setFontSize(22);
-                receiptsDoc.text("Comprovantes da Viagem", 105, 15, { align: 'center' });
-                receiptsDoc.setFontSize(10);
-                receiptsDoc.text(`Destino: ${trip.destination}`, 105, 22, { align: 'center' });
+                const detailedDoc = new jsPDF();
+                detailedDoc.setFontSize(22);
+                detailedDoc.text("Relatório Detalhado da Viagem", 105, 15, { align: 'center' });
+                detailedDoc.setFontSize(10);
+                detailedDoc.text(`Destino: ${trip.destination}`, 105, 22, { align: 'center' });
 
-                receiptsWithImages.forEach((exp, index) => {
-                    if (index > 0) receiptsDoc.addPage();
+                expenses.forEach((exp, index) => {
+                    if (index > 0) detailedDoc.addPage();
 
-                    receiptsDoc.setFontSize(12);
-                    receiptsDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 20);
+                    detailedDoc.setFontSize(12);
+                    detailedDoc.text(`Despesa ${index + 1}: ${exp.category} - R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, 20);
                     
                     if (exp.receipt) {
                         try {
                              // Dimensions for the image, maintaining aspect ratio
                             const img = new Image();
                             img.src = exp.receipt;
-                            const imgProps = receiptsDoc.getImageProperties(img.src);
-                            const pdfWidth = receiptsDoc.internal.pageSize.getWidth();
-                            const pdfHeight = receiptsDoc.internal.pageSize.getHeight();
+                            const imgProps = detailedDoc.getImageProperties(img.src);
+                            const pdfWidth = detailedDoc.internal.pageSize.getWidth();
+                            const pdfHeight = detailedDoc.internal.pageSize.getHeight();
                             const margin = 15;
                             const availableWidth = pdfWidth - 2 * margin;
                             const availableHeight = pdfHeight - 40; // Space for header
@@ -118,15 +120,20 @@ const ReportModal: React.FC<{
                                 imgWidth = imgHeight * aspectRatio;
                             }
                             const x = (pdfWidth - imgWidth) / 2;
-                            receiptsDoc.addImage(exp.receipt, 'JPEG', x, 30, imgWidth, imgHeight);
+                            detailedDoc.addImage(exp.receipt, 'JPEG', x, 30, imgWidth, imgHeight);
                         } catch(e) {
                             console.error("Error adding image to PDF:", e);
-                            receiptsDoc.text("Erro ao carregar imagem do comprovante.", 15, 40);
+                            detailedDoc.text("Erro ao carregar imagem do comprovante.", 15, 40);
                         }
+                    } else {
+                        detailedDoc.setFontSize(11);
+                        detailedDoc.setTextColor(100); // gray color
+                        detailedDoc.text("Sem comprovante anexado.", 15, 30);
+                        detailedDoc.setTextColor(0); // back to black
                     }
                 });
                 
-                downloadPdf(receiptsDoc, `comprovantes_viagem_${trip.destination}.pdf`);
+                downloadPdf(detailedDoc, `relatorio_detalhado_${trip.destination}.pdf`);
             }
         } catch (error) {
             console.error('Failed to generate PDF:', error);
@@ -145,8 +152,8 @@ const ReportModal: React.FC<{
                     <button onClick={() => generatePdf('summary')} className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
                         Gerar Resumo (PDF)
                     </button>
-                    <button onClick={() => generatePdf('receipts')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
-                        Gerar Comprovantes (PDF)
+                    <button onClick={() => generatePdf('detailed')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
+                        Gerar Relatório Detalhado (PDF)
                     </button>
                     <div className="relative py-2">
                         <div className="absolute inset-0 flex items-center" aria-hidden="true">
