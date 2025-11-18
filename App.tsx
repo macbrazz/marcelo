@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Trip, Expense, TripRecord } from './types';
 import TripSetup from './components/TripSetup';
@@ -13,7 +14,8 @@ const ReportModal: React.FC<{
     onClose: () => void;
     onEndTrip: () => void;
     setIsGenerating: (isGenerating: boolean) => void;
-}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating }) => {
+    isHistoryView?: boolean;
+}> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating, isHistoryView = false }) => {
 
     const downloadPdf = (doc: any, filename: string) => {
         try {
@@ -138,8 +140,13 @@ const ReportModal: React.FC<{
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6 text-center animate-fade-in-up" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-2xl font-bold text-slate-800 mb-4">Finalizar Viagem</h2>
-                <p className="text-slate-500 mb-6">Gere relatórios ou encerre a viagem atual. A viagem será salva no seu histórico.</p>
+                <h2 className="text-2xl font-bold text-slate-800 mb-4">{isHistoryView ? "Relatórios da Viagem" : "Finalizar Viagem"}</h2>
+                <p className="text-slate-500 mb-6">
+                    {isHistoryView 
+                        ? "Gere segundas vias dos relatórios desta viagem." 
+                        : "Gere relatórios ou encerre a viagem atual. A viagem será salva no seu histórico."
+                    }
+                </p>
                 <div className="space-y-3">
                     <button onClick={() => generatePdf('summary')} className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
                         Gerar Resumo (PDF)
@@ -147,17 +154,22 @@ const ReportModal: React.FC<{
                     <button onClick={() => generatePdf('detailed')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
                         Gerar Relatório Detalhado (PDF)
                     </button>
-                    <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                            <div className="w-full border-t border-slate-200"></div>
-                        </div>
-                    </div>
-                    <button onClick={onEndTrip} className="w-full py-3 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition">
-                        Encerrar e Salvar Viagem
-                    </button>
+                    
+                    {!isHistoryView && (
+                        <>
+                            <div className="relative py-2">
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="w-full border-t border-slate-200"></div>
+                                </div>
+                            </div>
+                            <button onClick={onEndTrip} className="w-full py-3 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition">
+                                Encerrar e Salvar Viagem
+                            </button>
+                        </>
+                    )}
                 </div>
                 <button onClick={onClose} className="mt-6 text-slate-500 hover:text-slate-700 text-sm">
-                    Cancelar
+                    Fechar
                 </button>
             </div>
         </div>
@@ -204,6 +216,7 @@ const App: React.FC = () => {
     const [isTripSetupOpen, setIsTripSetupOpen] = useState(false);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [viewingHistoryTrip, setViewingHistoryTrip] = useState<TripRecord | null>(null);
 
     // --- Data Persistence Effects ---
 
@@ -249,6 +262,7 @@ const App: React.FC = () => {
         setCurrentTrip(trip);
         setExpenses([]); // Reset expenses for new trip. The useEffect will persist this change.
         setIsTripSetupOpen(false);
+        setViewingHistoryTrip(null);
     };
 
     const handleAddExpense = (expense: Omit<Expense, 'id'>) => {
@@ -279,8 +293,15 @@ const App: React.FC = () => {
 
     const handleDeleteTrip = (tripId: number) => {
         setTripHistory(prev => prev.filter(trip => trip.id !== tripId));
+        if (viewingHistoryTrip && viewingHistoryTrip.id === tripId) {
+            setViewingHistoryTrip(null);
+        }
     };
     
+    const handleSelectHistoryTrip = (record: TripRecord) => {
+        setViewingHistoryTrip(record);
+    };
+
     // On initial load, if there's no active trip and no history, open the setup modal.
     useEffect(() => {
         const hasActiveTrip = !!localStorage.getItem('currentTrip');
@@ -290,6 +311,11 @@ const App: React.FC = () => {
             setIsTripSetupOpen(true);
         }
     }, []);
+
+    // Logic to determine what data to pass to report modal
+    const activeTripData = currentTrip 
+        ? { trip: currentTrip, expenses: expenses } 
+        : (viewingHistoryTrip ? { trip: viewingHistoryTrip.trip, expenses: viewingHistoryTrip.expenses } : null);
 
     // --- Render Logic ---
     
@@ -313,13 +339,14 @@ const App: React.FC = () => {
                 onClose={() => setIsTripSetupOpen(false)} 
             />
 
-            {isReportModalOpen && currentTrip && (
+            {isReportModalOpen && activeTripData && (
                 <ReportModal 
-                    trip={currentTrip}
-                    expenses={expenses}
+                    trip={activeTripData.trip}
+                    expenses={activeTripData.expenses}
                     onClose={() => setIsReportModalOpen(false)}
                     onEndTrip={handleEndTrip}
                     setIsGenerating={setIsGenerating}
+                    isHistoryView={!!viewingHistoryTrip && !currentTrip}
                 />
             )}
 
@@ -330,11 +357,20 @@ const App: React.FC = () => {
                     onAddExpense={handleAddExpense}
                     onShowReportModal={() => setIsReportModalOpen(true)}
                 />
+            ) : viewingHistoryTrip ? (
+                 <ExpenseTracker
+                    trip={viewingHistoryTrip.trip}
+                    expenses={viewingHistoryTrip.expenses}
+                    onShowReportModal={() => setIsReportModalOpen(true)}
+                    readOnly={true}
+                    onBack={() => setViewingHistoryTrip(null)}
+                />
             ) : (
                 <TripHistory
                     trips={tripHistory}
                     onStartNewTrip={() => setIsTripSetupOpen(true)}
                     onDeleteTrip={handleDeleteTrip}
+                    onSelectTrip={handleSelectHistoryTrip}
                 />
             )}
         </>

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { TripRecord } from '../types';
 import { PlusIcon, TrashIcon } from './icons';
@@ -6,12 +7,13 @@ interface TripHistoryProps {
   trips: TripRecord[];
   onStartNewTrip: () => void;
   onDeleteTrip: (tripId: number) => void;
+  onSelectTrip: (tripRecord: TripRecord) => void;
 }
 
-const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip, onDeleteTrip }) => {
+const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip, onDeleteTrip, onSelectTrip }) => {
   return (
     <div className="min-h-screen bg-slate-100">
-      <header className="bg-white shadow-md p-4 sticky top-0 z-10">
+      <header className="bg-white shadow-md px-4 pb-4 sticky top-0 z-10 pt-[calc(1rem+env(safe-area-inset-top))]">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <h1 className="text-3xl font-bold text-slate-800">Minhas Viagens</h1>
           <button
@@ -34,7 +36,11 @@ const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip, onDele
         ) : (
           <ul className="space-y-4">
             {[...trips].reverse().map((record) => (
-              <li key={record.id} className="bg-white p-6 rounded-xl shadow-md transition-transform hover:scale-[1.02] hover:shadow-lg">
+              <li 
+                key={record.id} 
+                onClick={() => onSelectTrip(record)}
+                className="bg-white p-6 rounded-xl shadow-md transition-transform hover:scale-[1.02] hover:shadow-lg cursor-pointer active:bg-slate-50"
+              >
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-xs text-slate-500">{new Date(record.trip.date + 'T00:00:00').toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
@@ -47,7 +53,8 @@ const TripHistory: React.FC<TripHistoryProps> = ({ trips, onStartNewTrip, onDele
                       <p className="text-2xl font-extrabold text-indigo-600">R$ {record.total.toFixed(2).replace('.', ',')}</p>
                     </div>
                      <button
-                        onClick={() => {
+                        onClick={(e) => {
+                            e.stopPropagation(); // Impede que o clique no lixo abra a viagem
                             if (window.confirm('Tem certeza que deseja excluir esta viagem? Esta ação não pode ser desfeita.')) {
                                 onDeleteTrip(record.id);
                             }

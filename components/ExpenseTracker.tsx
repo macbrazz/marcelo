@@ -1,13 +1,16 @@
+
 import React, { useState } from 'react';
 import { Trip, Expense, ExpenseCategory } from '../types';
-import { getCategoryIcon, CameraIcon, PlusIcon } from './icons';
+import { getCategoryIcon, CameraIcon, PlusIcon, ArrowLeftIcon } from './icons';
 import Camera from './Camera';
 
 interface ExpenseTrackerProps {
   trip: Trip;
   expenses: Expense[];
-  onAddExpense: (expense: Omit<Expense, 'id'>) => void;
+  onAddExpense?: (expense: Omit<Expense, 'id'>) => void;
   onShowReportModal: () => void;
+  readOnly?: boolean;
+  onBack?: () => void;
 }
 
 const AddExpenseForm: React.FC<{
@@ -21,7 +24,7 @@ const AddExpenseForm: React.FC<{
 
   const handleCapture = (imageDataUrl: string) => {
     setReceipt(imageDataUrl);
-    setShowCamera(false); // <-- correção
+    setShowCamera(false); 
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -30,7 +33,7 @@ const AddExpenseForm: React.FC<{
       onAdd({
         amount: parseFloat(amount),
         category,
-        receipt: receipt || undefined, // sem texto substituto aqui
+        receipt: receipt || undefined, 
       });
     } else {
       alert('Por favor, preencha pelo menos o valor e a categoria.');
@@ -58,7 +61,7 @@ const AddExpenseForm: React.FC<{
               step="0.01"
               placeholder="0,00"
               required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base p-2"
             />
           </div>
 
@@ -71,7 +74,7 @@ const AddExpenseForm: React.FC<{
               value={category}
               onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
               required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2"
+              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-base p-2"
             >
               {Object.values(ExpenseCategory).map((cat) => (
                 <option key={cat} value={cat}>
@@ -117,6 +120,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({
   expenses,
   onAddExpense,
   onShowReportModal,
+  readOnly = false,
+  onBack
 }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
@@ -124,14 +129,25 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({
   const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-28">
-      <header className="bg-white shadow-md p-4 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto">
-          <p className="text-sm text-gray-500">Viagem para</p>
-          <h1 className="text-2xl font-bold text-indigo-800">{trip.destination}</h1>
-          <div className="flex justify-between text-sm text-gray-600 mt-1">
-            <span>{trip.participants}</span>
-            <span>{new Date(trip.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+    <div className="min-h-screen bg-gray-50 pb-[calc(7rem+env(safe-area-inset-bottom))]">
+      <header className="bg-white shadow-md px-4 pb-4 sticky top-0 z-10 pt-[calc(1rem+env(safe-area-inset-top))]">
+        <div className="max-w-4xl mx-auto flex items-start gap-4">
+          {readOnly && onBack && (
+             <button 
+               onClick={onBack}
+               className="mt-1 p-2 -ml-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+               aria-label="Voltar"
+             >
+               <ArrowLeftIcon className="w-6 h-6" />
+             </button>
+          )}
+          <div className="flex-1">
+            <p className="text-sm text-gray-500">{readOnly ? 'Histórico de' : 'Viagem para'}</p>
+            <h1 className="text-2xl font-bold text-indigo-800">{trip.destination}</h1>
+            <div className="flex justify-between text-sm text-gray-600 mt-1">
+              <span>{trip.participants}</span>
+              <span>{new Date(trip.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+            </div>
           </div>
         </div>
       </header>
@@ -147,8 +163,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({
 
         {expenses.length === 0 ? (
           <div className="text-center py-16 px-4 border-2 border-dashed border-gray-300 rounded-lg">
-            <p className="text-gray-500">Nenhuma despesa cadastrada ainda.</p>
-            <p className="text-gray-400 text-sm mt-2">Clique em '+' para adicionar a primeira.</p>
+            <p className="text-gray-500">Nenhuma despesa cadastrada.</p>
+            {!readOnly && <p className="text-gray-400 text-sm mt-2">Clique em '+' para adicionar a primeira.</p>}
           </div>
         ) : (
           <ul className="space-y-3">
@@ -188,25 +204,27 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({
         )}
       </main>
 
-      <div className="fixed bottom-4 right-4 z-20 flex flex-col items-center gap-3">
-        <button
-          onClick={() => setIsAdding(true)}
-          className="bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-110"
-        >
-          <PlusIcon className="w-8 h-8" />
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="fixed right-4 z-20 flex flex-col items-center gap-3 bottom-[calc(1rem+env(safe-area-inset-bottom))]">
+          <button
+            onClick={() => setIsAdding(true)}
+            className="bg-indigo-600 text-white rounded-full p-4 shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-transform transform hover:scale-110"
+          >
+            <PlusIcon className="w-8 h-8" />
+          </button>
+        </div>
+      )}
 
-      <div className="fixed bottom-4 left-4 z-20">
+      <div className="fixed left-4 z-20 bottom-[calc(1rem+env(safe-area-inset-bottom))]">
         <button
           onClick={onShowReportModal}
-          className="bg-green-600 text-white rounded-full py-2 px-4 text-sm shadow-lg hover:bg-green-700 focus:outline-none"
+          className={`${readOnly ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'} text-white rounded-full py-2 px-4 text-sm shadow-lg focus:outline-none transition-colors`}
         >
-          Relatórios e Encerrar
+          {readOnly ? 'Gerar Relatórios (PDF)' : 'Relatórios e Encerrar'}
         </button>
       </div>
 
-      {isAdding && (
+      {isAdding && !readOnly && onAddExpense && (
         <AddExpenseForm
           onAdd={(expense) => {
             onAddExpense(expense);

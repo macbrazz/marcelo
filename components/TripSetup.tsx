@@ -50,7 +50,7 @@ const TripSetup: React.FC<TripSetupProps> = ({ isOpen, onTripStart, onClose }) =
               id="destination"
               value={destination}
               onChange={(e) => setDestination(e.target.value)}
-              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-base"
               placeholder="Ex: São Paulo, SP"
               required
             />
@@ -64,7 +64,7 @@ const TripSetup: React.FC<TripSetupProps> = ({ isOpen, onTripStart, onClose }) =
               id="participants"
               value={participants}
               onChange={(e) => setParticipants(e.target.value)}
-              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm placeholder-slate-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-base"
               placeholder="Ex: João, Maria"
               required
             />
@@ -78,7 +78,7 @@ const TripSetup: React.FC<TripSetupProps> = ({ isOpen, onTripStart, onClose }) =
               id="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              className="mt-1 block w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-base"
               required
             />
           </div>

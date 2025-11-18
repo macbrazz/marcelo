@@ -57,7 +57,7 @@ const Camera: React.FC<CameraProps> = ({ onCapture, onClose }) => {
     <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center">
       <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover"></video>
       <canvas ref={canvasRef} className="hidden"></canvas>
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex justify-center items-center gap-8">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 flex justify-center items-center gap-8 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <button onClick={onClose} className="text-white text-sm font-semibold py-2 px-4 rounded-lg bg-gray-700 hover:bg-gray-600">
           Cancelar
         </button>
