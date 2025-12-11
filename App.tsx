@@ -21,9 +21,35 @@ const ReportModal: React.FC<{
     companyFooter: string | null;
 }> = ({ trip, expenses, onClose, onEndTrip, setIsGenerating, isHistoryView = false, companyHeader, companyFooter }) => {
 
-    const downloadPdf = (doc: any, filename: string) => {
+    const shareOrDownloadPdf = async (doc: any, filename: string) => {
         try {
+            // Tenta usar a API de compartilhamento nativo (Mobile)
+            if (navigator.share && navigator.canShare) {
+                const pdfBlob = doc.output('blob');
+                const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+                if (navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: filename,
+                            text: `Segue em anexo o relatório: ${filename}`
+                        });
+                        return; // Se compartilhou com sucesso, encerra
+                    } catch (shareError: any) {
+                        // Ignora erro se o usuário cancelou o compartilhamento
+                        if (shareError.name !== 'AbortError') {
+                            console.warn("Share API failed, falling back to download", shareError);
+                        } else {
+                            return; // Usuário cancelou, não faz download automático
+                        }
+                    }
+                }
+            }
+
+            // Fallback: Download tradicional (Desktop ou mobile sem suporte a share de arquivos)
             doc.save(filename);
+
         } catch (e) {
             console.warn("doc.save() failed, falling back to output.", e);
             try {
@@ -149,7 +175,7 @@ const ReportModal: React.FC<{
                      summaryDoc.text("Nenhuma despesa registrada.", 15, currentY);
                 }
 
-                downloadPdf(summaryDoc, `resumo_viagem_${trip.destination}.pdf`);
+                await shareOrDownloadPdf(summaryDoc, `resumo_viagem_${trip.destination}.pdf`);
 
             } else if (type === 'detailed') {
                 if (expenses.length === 0) {
@@ -241,7 +267,7 @@ const ReportModal: React.FC<{
                     currentY += 5; // Separator space
                 });
                 
-                downloadPdf(detailedDoc, `relatorio_detalhado_${trip.destination}.pdf`);
+                await shareOrDownloadPdf(detailedDoc, `relatorio_detalhado_${trip.destination}.pdf`);
             }
         } catch (error) {
             console.error('Failed to generate PDF:', error);
@@ -257,16 +283,16 @@ const ReportModal: React.FC<{
                 <h2 className="text-2xl font-bold text-slate-800 mb-4">{isHistoryView ? "Relatórios da Viagem" : "Finalizar Viagem"}</h2>
                 <p className="text-slate-500 mb-6">
                     {isHistoryView 
-                        ? "Gere segundas vias dos relatórios desta viagem." 
+                        ? "Compartilhe os relatórios desta viagem." 
                         : "Gere relatórios ou encerre a viagem atual. A viagem será salva no seu histórico."
                     }
                 </p>
                 <div className="space-y-3">
                     <button onClick={() => generatePdf('summary')} className="w-full py-3 px-4 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition">
-                        Gerar Resumo (PDF)
+                        Compartilhar Resumo (PDF)
                     </button>
                     <button onClick={() => generatePdf('detailed')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
-                        Gerar Relatório Detalhado (PDF)
+                        Compartilhar Detalhado (PDF)
                     </button>
                     
                     {!isHistoryView && (
