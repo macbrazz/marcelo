@@ -61,24 +61,26 @@ const ReportModal: React.FC<{
         }
     };
 
-    const addCompanyBranding = (doc: any, options: { skipFooter?: boolean } = {}) => {
+    const addCompanyBranding = (doc: any, options: { skipHeader?: boolean, skipFooter?: boolean } = {}) => {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         let topMargin = 20;
         let bottomMargin = 20;
 
-        if (companyHeader) {
+        // Adiciona Cabeçalho
+        if (companyHeader && !options.skipHeader) {
             try {
                 const imgProps = doc.getImageProperties(companyHeader);
-                // Scale to fit width, max height e.g. 40mm
+                // Scale to fit width
                 const headerHeight = (imgProps.height * pageWidth) / imgProps.width;
                 doc.addImage(companyHeader, 'PNG', 0, 0, pageWidth, headerHeight);
-                topMargin = headerHeight + 5;
+                topMargin = headerHeight + 10;
             } catch (e) {
                 console.error("Error adding header", e);
             }
         }
 
+        // Adiciona Rodapé
         if (companyFooter && !options.skipFooter) {
             try {
                 const imgProps = doc.getImageProperties(companyFooter);
@@ -105,9 +107,21 @@ const ReportModal: React.FC<{
 
             if (type === 'summary') {
                 const summaryDoc = new jsPDF();
+                const pageHeight = summaryDoc.internal.pageSize.getHeight();
+                const pageWidth = summaryDoc.internal.pageSize.getWidth();
                 
-                // Add Branding and get adjusted margins
-                const { topMargin } = addCompanyBranding(summaryDoc);
+                // Adiciona branding APENAS CABEÇALHO inicialmente (skipFooter: true)
+                // O rodapé será adicionado manualmente apenas na última página
+                const { topMargin } = addCompanyBranding(summaryDoc, { skipFooter: true });
+
+                // Calcula altura do rodapé para uso futuro
+                let footerHeight = 0;
+                if (companyFooter) {
+                    try {
+                        const imgProps = summaryDoc.getImageProperties(companyFooter);
+                        footerHeight = (imgProps.height * pageWidth) / imgProps.width;
+                    } catch (e) {}
+                }
 
                 summaryDoc.setFontSize(22);
                 summaryDoc.text("Relatório de Despesas de Viagem", 105, topMargin + 10, { align: 'center' });
@@ -158,9 +172,10 @@ const ReportModal: React.FC<{
                     summaryDoc.text("Lista de Despesas", 15, currentY);
                     currentY += 10;
                     expenses.forEach((exp, index) => {
-                        if (currentY > 250) { // Simple page break check
+                        // Verifica se ultrapassa a página com margem padrão de segurança (20)
+                        if (currentY > pageHeight - 20) {
                             summaryDoc.addPage();
-                            addCompanyBranding(summaryDoc); // Add branding to new page
+                            addCompanyBranding(summaryDoc, { skipFooter: true }); // Cabeçalho em todas as páginas
                             currentY = topMargin + 10;
                         }
                         summaryDoc.setFontSize(11);
@@ -171,6 +186,21 @@ const ReportModal: React.FC<{
                 } else {
                      summaryDoc.setFontSize(12);
                      summaryDoc.text("Nenhuma despesa registrada.", 15, currentY);
+                }
+
+                // --- Lógica para o Rodapé na Última Página ---
+                if (companyFooter) {
+                    // Verifica se há espaço suficiente para o rodapé na página atual
+                    // Se não houver, cria uma nova página
+                    const spaceNeeded = footerHeight + 10; // Altura do rodapé + margem
+                    if (currentY + spaceNeeded > pageHeight) {
+                        summaryDoc.addPage();
+                        addCompanyBranding(summaryDoc, { skipFooter: true }); // Cabeçalho na nova página
+                    }
+                    
+                    // Desenha o rodapé na página atual (que é a última)
+                    // Usamos skipHeader: true para não redesenhar o cabeçalho que já está lá
+                    addCompanyBranding(summaryDoc, { skipHeader: true, skipFooter: false });
                 }
 
                 await shareOrDownloadPdf(summaryDoc, `resumo_viagem_${trip.destination}.pdf`);
@@ -196,11 +226,10 @@ const ReportModal: React.FC<{
                     let topMargin = 20;
 
                     // Se for o primeiro item da página (par), adiciona página (exceto na primeira iteração absoluta)
-                    // e desenha o cabeçalho
                     if (positionOnPage === 0) {
                         if (index > 0) detailedDoc.addPage();
                         
-                        // Adiciona cabeçalho, pula rodapé
+                        // Adiciona cabeçalho, PULA O RODAPÉ (skipFooter: true)
                         const margins = addCompanyBranding(detailedDoc, { skipFooter: true });
                         topMargin = margins.topMargin;
                         
@@ -214,12 +243,11 @@ const ReportModal: React.FC<{
                         topMargin += 15;
                     } else {
                         // Recalcula margem caso estejamos no segundo item, baseando-se no cabeçalho (que já está lá)
-                        // Apenas simulamos a altura do cabeçalho
                          if (companyHeader) {
                             try {
                                 const imgProps = detailedDoc.getImageProperties(companyHeader);
                                 const headerHeight = (imgProps.height * pageWidth) / imgProps.width;
-                                topMargin = headerHeight + 20;
+                                topMargin = headerHeight + 20; // +10 do header + 10 do titulo
                             } catch(e) {}
                         }
                     }
