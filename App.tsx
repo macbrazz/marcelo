@@ -61,7 +61,7 @@ const ReportModal: React.FC<{
         }
     };
 
-    const addCompanyBranding = (doc: any) => {
+    const addCompanyBranding = (doc: any, options: { skipFooter?: boolean } = {}) => {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
         let topMargin = 20;
@@ -72,16 +72,14 @@ const ReportModal: React.FC<{
                 const imgProps = doc.getImageProperties(companyHeader);
                 // Scale to fit width, max height e.g. 40mm
                 const headerHeight = (imgProps.height * pageWidth) / imgProps.width;
-                // Limit height if absurdly tall, though scaling to width usually fixes it.
-                // We'll place it at 0,0
                 doc.addImage(companyHeader, 'PNG', 0, 0, pageWidth, headerHeight);
-                topMargin = headerHeight + 10;
+                topMargin = headerHeight + 5;
             } catch (e) {
                 console.error("Error adding header", e);
             }
         }
 
-        if (companyFooter) {
+        if (companyFooter && !options.skipFooter) {
             try {
                 const imgProps = doc.getImageProperties(companyFooter);
                 const footerHeight = (imgProps.height * pageWidth) / imgProps.width;
@@ -160,7 +158,7 @@ const ReportModal: React.FC<{
                     summaryDoc.text("Lista de Despesas", 15, currentY);
                     currentY += 10;
                     expenses.forEach((exp, index) => {
-                        if (currentY > 250) { // Simple page break check, rudimentary
+                        if (currentY > 250) { // Simple page break check
                             summaryDoc.addPage();
                             addCompanyBranding(summaryDoc); // Add branding to new page
                             currentY = topMargin + 10;
@@ -185,89 +183,111 @@ const ReportModal: React.FC<{
                 }
 
                 const detailedDoc = new jsPDF();
-                
-                // Add branding to first page
-                const { topMargin, bottomMargin } = addCompanyBranding(detailedDoc);
+                const pageWidth = detailedDoc.internal.pageSize.getWidth();
                 const pageHeight = detailedDoc.internal.pageSize.getHeight();
-                const availableHeight = pageHeight - bottomMargin;
-
-                detailedDoc.setFontSize(22);
-                detailedDoc.text("Relatório Detalhado da Viagem", 105, topMargin + 10, { align: 'center' });
-                detailedDoc.setFontSize(10);
-                detailedDoc.text(`Destino: ${trip.destination} | Saldo: R$ ${balance.toFixed(2).replace('.', ',')}`, 105, topMargin + 17, { align: 'center' });
-                if (trip.vehicle) {
-                     detailedDoc.text(`Veículo: ${trip.vehicle.model} (${trip.vehicle.plate})`, 105, topMargin + 22, { align: 'center' });
-                }
-
-                let currentY = topMargin + 35; // Initial Y after header info
-
+                
+                // Configuração de layout: 2 recibos por página
+                // Dividimos a página em dois "slots" verticais após o cabeçalho
+                
                 expenses.forEach((exp, index) => {
-                    // Check if we have space for the text block (approx 20 units) + image (min 50 units)
-                    if (currentY > availableHeight - 60) {
-                        detailedDoc.addPage();
-                        addCompanyBranding(detailedDoc);
-                        currentY = topMargin + 10;
+                    const positionOnPage = index % 2; // 0 = Topo, 1 = Baixo
+                    let currentY = 0;
+                    let slotHeight = 0;
+                    let topMargin = 20;
+
+                    // Se for o primeiro item da página (par), adiciona página (exceto na primeira iteração absoluta)
+                    // e desenha o cabeçalho
+                    if (positionOnPage === 0) {
+                        if (index > 0) detailedDoc.addPage();
+                        
+                        // Adiciona cabeçalho, pula rodapé
+                        const margins = addCompanyBranding(detailedDoc, { skipFooter: true });
+                        topMargin = margins.topMargin;
+                        
+                        // Define título da página
+                        detailedDoc.setFontSize(16);
+                        detailedDoc.text(`Recibos - ${trip.destination}`, 105, topMargin + 5, { align: 'center' });
+                        detailedDoc.setFontSize(10);
+                        detailedDoc.text(`Pág. ${Math.floor(index / 2) + 1}`, 195, topMargin + 5, { align: 'right' });
+                        
+                        // Ajusta topMargin para começar o conteúdo
+                        topMargin += 15;
+                    } else {
+                        // Recalcula margem caso estejamos no segundo item, baseando-se no cabeçalho (que já está lá)
+                        // Apenas simulamos a altura do cabeçalho
+                         if (companyHeader) {
+                            try {
+                                const imgProps = detailedDoc.getImageProperties(companyHeader);
+                                const headerHeight = (imgProps.height * pageWidth) / imgProps.width;
+                                topMargin = headerHeight + 20;
+                            } catch(e) {}
+                        }
                     }
 
+                    // Altura disponível total para conteúdo
+                    const availableHeight = pageHeight - topMargin - 10; // 10 padding bottom
+                    slotHeight = availableHeight / 2;
+
+                    // Define o Y inicial para este recibo
+                    if (positionOnPage === 0) {
+                        currentY = topMargin;
+                    } else {
+                        currentY = topMargin + slotHeight;
+                        // Linha divisória tracejada entre os recibos
+                        detailedDoc.setLineDash([2, 2], 0);
+                        detailedDoc.setDrawColor(200);
+                        detailedDoc.line(10, currentY, pageWidth - 10, currentY);
+                        detailedDoc.setLineDash([]);
+                        currentY += 10; // Padding após a linha
+                        slotHeight -= 10; // Ajusta altura útil
+                    }
+
+                    // Dados do Recibo (Texto)
                     detailedDoc.setFontSize(14);
-                    detailedDoc.text(`Despesa #${index + 1}`, 15, currentY); 
+                    detailedDoc.setTextColor(0);
+                    detailedDoc.text(`Despesa #${index + 1}: ${exp.category}`, 15, currentY + 5);
                     
                     detailedDoc.setFontSize(12);
-                    detailedDoc.text(`Categoria: ${exp.category}`, 15, currentY + 10);
-                    detailedDoc.text(`Valor: R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, currentY + 18);
+                    detailedDoc.text(`Valor: R$ ${exp.amount.toFixed(2).replace('.', ',')}`, 15, currentY + 12);
                     
-                    currentY += 25;
+                    // Área disponível para a imagem
+                    const imageStartY = currentY + 18;
+                    const maxImageHeight = slotHeight - 25; // Deixa espaço para o texto e padding
+                    const maxImageWidth = pageWidth - 30; // Margens laterais (15 + 15)
 
                     if (exp.receipt) {
                         try {
                             const img = new Image();
                             img.src = exp.receipt;
                             const imgProps = detailedDoc.getImageProperties(img.src);
-                            const pdfWidth = detailedDoc.internal.pageSize.getWidth();
-                            const margin = 15;
-                            const maxImgWidth = pdfWidth - 2 * margin;
                             
-                            // Calculate remaining height on page
-                            let maxImgHeight = availableHeight - currentY - 10; // 10 padding
-
-                            // If hardly any space left, new page for image
-                            if (maxImgHeight < 40) { 
-                                detailedDoc.addPage();
-                                addCompanyBranding(detailedDoc);
-                                currentY = topMargin + 10;
-                                maxImgHeight = availableHeight - currentY - 10;
-                            }
-
                             const aspectRatio = imgProps.width / imgProps.height;
-                            let imgWidth = maxImgWidth;
+                            let imgWidth = maxImageWidth;
                             let imgHeight = imgWidth / aspectRatio;
 
-                            if (imgHeight > maxImgHeight) {
-                                imgHeight = maxImgHeight;
+                            // Se a altura calculada for maior que o permitido, ajusta pela altura
+                            if (imgHeight > maxImageHeight) {
+                                imgHeight = maxImageHeight;
                                 imgWidth = imgHeight * aspectRatio;
                             }
 
-                            const x = (pdfWidth - imgWidth) / 2;
-                            detailedDoc.addImage(exp.receipt, 'JPEG', x, currentY, imgWidth, imgHeight);
-                            currentY += imgHeight + 10; // Space after image
-
+                            const x = (pageWidth - imgWidth) / 2;
+                            detailedDoc.addImage(exp.receipt, 'JPEG', x, imageStartY, imgWidth, imgHeight);
+                            
                         } catch(e) {
                             console.error("Error adding image to PDF:", e);
-                            detailedDoc.text("Erro ao carregar imagem do comprovante.", 15, currentY);
-                            currentY += 10;
+                            detailedDoc.setFontSize(10);
+                            detailedDoc.setTextColor(200, 0, 0);
+                            detailedDoc.text("Erro ao renderizar imagem.", 15, imageStartY + 10);
                         }
                     } else {
-                        detailedDoc.setFontSize(11);
-                        detailedDoc.setTextColor(100); 
-                        detailedDoc.text("Sem comprovante anexado.", 15, currentY);
-                        detailedDoc.setTextColor(0); 
-                        currentY += 10;
+                        detailedDoc.setFontSize(10);
+                        detailedDoc.setTextColor(150);
+                        detailedDoc.text("(Sem comprovante anexado)", 15, imageStartY + 10);
                     }
-                    
-                    currentY += 5; // Separator space
                 });
                 
-                await shareOrDownloadPdf(detailedDoc, `relatorio_detalhado_${trip.destination}.pdf`);
+                await shareOrDownloadPdf(detailedDoc, `recibos_viagem_${trip.destination}.pdf`);
             }
         } catch (error) {
             console.error('Failed to generate PDF:', error);
@@ -292,7 +312,7 @@ const ReportModal: React.FC<{
                         Compartilhar Resumo (PDF)
                     </button>
                     <button onClick={() => generatePdf('detailed')} className="w-full py-3 px-4 bg-teal-600 text-white rounded-lg font-semibold hover:bg-teal-700 transition">
-                        Compartilhar Detalhado (PDF)
+                        Compartilhar Recibos (PDF)
                     </button>
                     
                     {!isHistoryView && (
